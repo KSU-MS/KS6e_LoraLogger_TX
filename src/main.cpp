@@ -16,6 +16,9 @@ int pin_dio0 = 6;
 int pin_nrst = 7;
 int pin_dio1 = 5;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
+int packVoltage=0;
+byte inverterTemp0=0;
+byte inverterTemp1=0;
 /*
  * CAN Variables
  */
@@ -24,15 +27,16 @@ static CAN_message_t msg_rx;
 static CAN_message_t msg_tx;
 // static CAN_message_t xb_msg;
 File logger;
-String output = "7FF12345678,7FF12345678,7FF12345678";
+String output;
 /*
  * Variables to help with time calculation
  */
 uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
-Metro timer_flush = Metro(500);
-Metro LoraTimer = Metro(100);
+Metro timer_flush = Metro(50);
+Metro LoraTimer = Metro(1000);
+Metro getLoraData = Metro(200);
 void parse_can_message();
 void write_to_SD(CAN_message_t *msg);
 time_t getTeensy3Time();
@@ -43,9 +47,7 @@ void setup() {
   Serial.print(F("[SX1276] Initializing ... "));
   //int state = radio.begin(); //-121dBm
   //int state = radio.begin(868.0); //-20dBm
-  int state = radio.beginFSK(915.0,20); //-23dBm
-  radio.disableAddressFiltering();
-
+  int state = radio.begin(915.0); //-23dBm
   if (state == RADIOLIB_ERR_NONE) {
     Serial.println(F("init success!"));
   } else {
@@ -75,7 +77,7 @@ void setup() {
     //Serial.begin(115200);
 
     /* Set up real-time clock */
-    Teensy3Clock.set(1656732300); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
+    //Teensy3Clock.set(1660351622); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
     setSyncProvider(getTeensy3Time); // registers Teensy RTC as system time
     if (timeStatus() != timeSet) {
         Serial.println("RTC not set up - uncomment the Teensy3Clock.set() function call to set the time");
@@ -119,16 +121,24 @@ void setup() {
     logger.flush();
 }
 void loop() {
-    if(Serial.available()){
-        output = Serial.readString();
-        
-    }
+        if(CAN.read(msg_rx)){
+            if(msg_rx.id==0xA7){
+            packVoltage=msg_rx.buf[0]+(msg_rx.buf[1]*256);
+            Serial.printf("PackVolts: %d\n",packVoltage);
+        }
+        if(msg_rx.id==0xA2){
+            // inverterTemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
+            // Serial.printf("temp: %d\n",inverterTemp);
+            inverterTemp0=msg_rx.buf[0];
+            inverterTemp1=msg_rx.buf[1];
+        }
+        }
     /* Process and log incoming CAN messages */
     parse_can_message();
     /* Flush data to SD card occasionally */
-    // if (timer_flush.check()) {
-    //     logger.flush(); // Flush data to disk (data is also flushed whenever the 512 Byte buffer fills up, but this call ensures we don't lose more than a second of data when the car turns off)
-    // }
+    if (timer_flush.check()) {
+        logger.flush(); // Flush data to disk (data is also flushed whenever the 512 Byte buffer fills up, but this call ensures we don't lose more than a second of data when the car turns off)
+    }
     /* Print timestamp to serial occasionally */
     if (timer_debug_RTC.check()) {
         Serial.println(Teensy3Clock.get());
@@ -138,6 +148,10 @@ void loop() {
 
 
     if(LoraTimer.check()){
+        String output = String(packVoltage);
+        output+="\n";
+        output+=String(inverterTemp0);
+        output+=String(inverterTemp1);
         int state = radio.transmit(output);
         if (state == RADIOLIB_ERR_NONE) {
             // the packet was successfully transmitted
