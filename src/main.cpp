@@ -16,9 +16,8 @@ int pin_dio0 = 6;
 int pin_nrst = 7;
 int pin_dio1 = 5;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
-int packVoltage=0;
-byte inverterTemp0=0;
-byte inverterTemp1=0;
+String packVoltage="";
+String inverterTemp="";
 /*
  * CAN Variables
  */
@@ -121,18 +120,22 @@ void setup() {
     logger.flush();
 }
 void loop() {
-        if(CAN.read(msg_rx)){
-            if(msg_rx.id==0xA7){
-            packVoltage=msg_rx.buf[0]+(msg_rx.buf[1]*256);
-            Serial.printf("PackVolts: %d\n",packVoltage);
-        }
+    if(CAN.read(msg_rx)){
+        if(msg_rx.id==0xA7){
+            packVoltage="";
+            for(int i =0;i<msg_rx.len;i++){
+                packVoltage+=String(msg_rx.buf[i],HEX);
+            }
+            Serial.println(packVoltage);
+    }
         if(msg_rx.id==0xA2){
-            // inverterTemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
-            // Serial.printf("temp: %d\n",inverterTemp);
-            inverterTemp0=msg_rx.buf[0];
-            inverterTemp1=msg_rx.buf[1];
+            inverterTemp="";
+            for(int i =0;i<msg_rx.len;i++){
+                inverterTemp+=String(msg_rx.buf[i],HEX);
+            }
+            Serial.println(inverterTemp);
         }
-        }
+    }
     /* Process and log incoming CAN messages */
     parse_can_message();
     /* Flush data to SD card occasionally */
@@ -148,10 +151,9 @@ void loop() {
 
 
     if(LoraTimer.check()){
-        String output = String(packVoltage);
-        output+="\n";
-        output+=String(inverterTemp0);
-        output+=String(inverterTemp1);
+        String output = packVoltage;
+        output+=",";
+        output+=inverterTemp;
         int state = radio.transmit(output);
         if (state == RADIOLIB_ERR_NONE) {
             // the packet was successfully transmitted
