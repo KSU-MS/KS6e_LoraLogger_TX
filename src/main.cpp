@@ -4,6 +4,7 @@
  yoinked from hytech racing "telemetry control unit" repo
  removed all features except can logging to SD
  */
+#include <KS2eCAN.hpp>
 #include <Arduino.h>
 #include <SD.h>
 #include <Wire.h>
@@ -15,11 +16,21 @@ int pin_cs = 10;
 int pin_dio0 = 6;
 int pin_nrst = 7;
 int pin_dio1 = 5;
+int transmissionState = RADIOLIB_ERR_NONE;
+
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
-float packvoltage=0;
-float motortemp=0;
-float invertertemp=0;
+uint16_t packvoltage=0,invertercurrent=0,torquereq=0,motorrpm=0;
+uint16_t motortemp=0;
+uint16_t invertertemp=0;
+uint16_t accel1_=0,accel2_=0,brake1_=0;
 String invfaults="";
+String pedalreadings="";
+// flag to indicate that a packet was sent
+volatile bool transmittedFlag = true;
+
+// disable interrupt when it's not needed
+volatile bool enableInterrupt = true;
+
 /*
  * CAN Variables
  */
@@ -36,12 +47,22 @@ uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
 Metro timer_flush = Metro(50);
-Metro LoraTimer = Metro(100);
+Metro LoraTimer = Metro(1);
 Metro getLoraData = Metro(200);
 void parse_can_message();
 void write_to_SD(CAN_message_t *msg);
 time_t getTeensy3Time();
 void sd_date_time(uint16_t* date, uint16_t* time);
+void setFlag(void) {
+  // check if the interrupt is enabled
+  if(!enableInterrupt) {
+    return;
+  }
+
+  // we sent a packet, set the flag
+  transmittedFlag = true;
+  
+}
 void setup() {
   delay(500); //Wait for ESP32 to be able to print
 
@@ -72,6 +93,7 @@ void setup() {
   int pin_rx_enable = 8;
   int pin_tx_enable = 9;
   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
+  radio.setDio0Action(setFlag);
     //SD logging init stuff
     delay(500); // Prevents suprious text files when turning the car on and off rapidly
     /* Set up Serial, CAN */
@@ -120,27 +142,52 @@ void setup() {
     
     logger.println("time,msg.id,msg.len,data"); // Print CSV heading to the logfile
     logger.flush();
+    transmissionState = radio.startTransmit("Hello World!");
 }
+
+// this function is called when a complete packet
+// is transmitted by the module
+// IMPORTANT: this function MUST be 'void' type
+//            and MUST NOT have any arguments!
 void loop() {
     if(CAN.read(msg_rx)){
-        // if(msg_rx.id==0xA7){
-        //     packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
-        //     Serial.printf("PackVolts: %f\n",packvoltage);
-        // }
-        // if(msg_rx.id==0xA2){
-        //     motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
-        //     Serial.printf("motortemp: %f\n",motortemp);
-        // }
-        // if(msg_rx.id==0xA0){
-        //     invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
-        //     Serial.printf("invtemp: %f\n",invertertemp);
-        // }
-        // if(msg_rx.id==0xAB){
-        //     invfaults="";
-        //     for(int i = 0; i<msg_rx.len;i++){
-        //         invfaults+=String(msg_rx.buf[i],HEX);
-        //     }
-        // }
+        if(msg_rx.id==ID_MC_TORQUE_TIMER_INFORMATION){
+            torquereq=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
+            Serial.printf("torquereq: %d\n",torquereq);
+        }        
+        if(msg_rx.id==ID_MC_MOTOR_POSITION_INFORMATION){
+            motorrpm=(msg_rx.buf[2]+msg_rx.buf[3]*256)/10;
+            Serial.printf("motorrpm: %d\n",motorrpm);
+        }
+        if(msg_rx.id==ID_MC_CURRENT_INFORMATION){
+            invertercurrent=(msg_rx.buf[6]+msg_rx.buf[7]*256)/10;
+            Serial.printf("PackCurrent: %d\n",invertercurrent);
+        }
+        if(msg_rx.id==ID_MC_VOLTAGE_INFORMATION){
+            packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
+            Serial.printf("PackVolts: %d\n",packvoltage);
+        }
+        if(msg_rx.id==ID_MC_TEMPERATURES_3){
+            motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
+            Serial.printf("motortemp: %d\n",motortemp);
+        }
+        if(msg_rx.id==ID_MC_TEMPERATURES_1){
+            invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
+            Serial.printf("invtemp: %d\n",invertertemp);
+        }
+        if(msg_rx.id==ID_MC_FAULT_CODES){
+            invfaults="";
+            for(int i = 0; i<msg_rx.len;i++){
+                uint8_t temp = msg_rx.buf[i];
+                String tempo = String(temp,HEX);
+                invfaults+=tempo;
+            }
+        }
+        if(msg_rx.id==ID_VCU_PEDAL_READINGS){
+            accel1_=(msg_rx.buf[0]+(msg_rx.buf[1]*256));
+            accel2_=(msg_rx.buf[2]+(msg_rx.buf[3]*256));
+            brake1_=(msg_rx.buf[4]+(msg_rx.buf[5]*256));
+        }
     }
     /* Process and log incoming CAN messages */
     parse_can_message();
@@ -154,66 +201,52 @@ void loop() {
     }
 
 
-    if(LoraTimer.check()){
+    if(LoraTimer.check() && transmittedFlag){
+        enableInterrupt=false;
+        transmittedFlag=false;
         float starttime = millis();
         output="";
-        output = String(packvoltage);
+        output += packvoltage;
         output+=",";
-        output+=String(motortemp);
+        output+=motortemp;
         output+=",";
-        output+=String(invertertemp);
+        output+=invertertemp;
         output+=",";
-        output+=invfaults;        
-        int state = radio.transmit(output);
-        if (state == RADIOLIB_ERR_NONE) {
-            // the packet was successfully transmitted
-            Serial.println(F(" success!"));
+        output+=invfaults;
+        output+=",";
+        output+=accel1_;
+        output+=",";
+        output+=accel2_;
+        output+=",";
+        output+=brake1_;
+        output+=",";
+        output+=invertercurrent;
+        output+=",";
+        output+=torquereq;
+        output+=",";
+        output+=motorrpm;
+        if (transmissionState == RADIOLIB_ERR_NONE) {
+        // the packet was successfully transmitted
+        Serial.println(F(" success!"));
 
-            // print measured data rate
-            Serial.print(F("[SX1276] Datarate:\t"));
-            Serial.print(radio.getDataRate());
-            Serial.println(F(" bps"));
-
-        } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-            // the supplied packet was longer than 256 bytes
-            Serial.println(F("too long!"));
-
-        } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
-            // timeout occurred while transmitting packet
-            Serial.println(F("timeout!"));
-
+        // print measured data rate
+        Serial.print(F("[SX1276] Datarate:\t"));
+        Serial.print(radio.getDataRate());
+        Serial.println(F(" bps"));
         } else {
-            // some other error occurred
-            Serial.print(F("failed, code "));
-            Serial.println(state);
-        }
-        float endtime = millis();
-    Serial.printf("took this long %f\n",endtime-starttime);
-
-}
+        // some other error occurred
+        Serial.print(F("failed, code "));
+        Serial.println(transmissionState);
+        }        
+        transmissionState = radio.startTransmit(output);
+        Serial.printf("timestamp %f\n",starttime/1000);
+        enableInterrupt=true;
+    }
 }
 void parse_can_message() {
     while (CAN.read(msg_rx)) {
 
         write_to_SD(&msg_rx); // Write to SD card buffer (if the buffer fills up, triggering a flush to disk, this will take 8ms)
-        if(msg_rx.id==0xA7){
-            packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
-            Serial.printf("PackVolts: %f\n",packvoltage);
-        }
-        if(msg_rx.id==0xA2){
-            motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
-            Serial.printf("motortemp: %f\n",motortemp);
-        }
-        if(msg_rx.id==0xA0){
-            invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
-            Serial.printf("invtemp: %f\n",invertertemp);
-        }
-        if(msg_rx.id==0xAB){
-            invfaults="";
-            for(int i = 0; i<msg_rx.len;i++){
-                invfaults+=String(msg_rx.buf[i],HEX);
-            }
-        }
         
     }
 }
