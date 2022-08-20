@@ -16,9 +16,10 @@ int pin_dio0 = 6;
 int pin_nrst = 7;
 int pin_dio1 = 5;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
-int packVoltage=0;
-byte inverterTemp0=0;
-byte inverterTemp1=0;
+float packvoltage=0;
+float motortemp=0;
+float invertertemp=0;
+String invfaults="";
 /*
  * CAN Variables
  */
@@ -35,7 +36,7 @@ uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
 Metro timer_flush = Metro(50);
-Metro LoraTimer = Metro(1000);
+Metro LoraTimer = Metro(100);
 Metro getLoraData = Metro(200);
 void parse_can_message();
 void write_to_SD(CAN_message_t *msg);
@@ -121,18 +122,26 @@ void setup() {
     logger.flush();
 }
 void loop() {
-        if(CAN.read(msg_rx)){
-            if(msg_rx.id==0xA7){
-            packVoltage=msg_rx.buf[0]+(msg_rx.buf[1]*256);
-            Serial.printf("PackVolts: %d\n",packVoltage);
-        }
-        if(msg_rx.id==0xA2){
-            // inverterTemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
-            // Serial.printf("temp: %d\n",inverterTemp);
-            inverterTemp0=msg_rx.buf[0];
-            inverterTemp1=msg_rx.buf[1];
-        }
-        }
+    if(CAN.read(msg_rx)){
+        // if(msg_rx.id==0xA7){
+        //     packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
+        //     Serial.printf("PackVolts: %f\n",packvoltage);
+        // }
+        // if(msg_rx.id==0xA2){
+        //     motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
+        //     Serial.printf("motortemp: %f\n",motortemp);
+        // }
+        // if(msg_rx.id==0xA0){
+        //     invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
+        //     Serial.printf("invtemp: %f\n",invertertemp);
+        // }
+        // if(msg_rx.id==0xAB){
+        //     invfaults="";
+        //     for(int i = 0; i<msg_rx.len;i++){
+        //         invfaults+=String(msg_rx.buf[i],HEX);
+        //     }
+        // }
+    }
     /* Process and log incoming CAN messages */
     parse_can_message();
     /* Flush data to SD card occasionally */
@@ -142,16 +151,19 @@ void loop() {
     /* Print timestamp to serial occasionally */
     if (timer_debug_RTC.check()) {
         Serial.println(Teensy3Clock.get());
-        // msg_tx.id=0x3FF;
-        // CAN.write(msg_tx);
     }
 
 
     if(LoraTimer.check()){
-        String output = String(packVoltage);
-        output+="\n";
-        output+=String(inverterTemp0);
-        output+=String(inverterTemp1);
+        float starttime = millis();
+        output="";
+        output = String(packvoltage);
+        output+=",";
+        output+=String(motortemp);
+        output+=",";
+        output+=String(invertertemp);
+        output+=",";
+        output+=invfaults;        
         int state = radio.transmit(output);
         if (state == RADIOLIB_ERR_NONE) {
             // the packet was successfully transmitted
@@ -175,12 +187,33 @@ void loop() {
             Serial.print(F("failed, code "));
             Serial.println(state);
         }
+        float endtime = millis();
+    Serial.printf("took this long %f\n",endtime-starttime);
+
 }
 }
 void parse_can_message() {
     while (CAN.read(msg_rx)) {
 
         write_to_SD(&msg_rx); // Write to SD card buffer (if the buffer fills up, triggering a flush to disk, this will take 8ms)
+        if(msg_rx.id==0xA7){
+            packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
+            Serial.printf("PackVolts: %f\n",packvoltage);
+        }
+        if(msg_rx.id==0xA2){
+            motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
+            Serial.printf("motortemp: %f\n",motortemp);
+        }
+        if(msg_rx.id==0xA0){
+            invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
+            Serial.printf("invtemp: %f\n",invertertemp);
+        }
+        if(msg_rx.id==0xAB){
+            invfaults="";
+            for(int i = 0; i<msg_rx.len;i++){
+                invfaults+=String(msg_rx.buf[i],HEX);
+            }
+        }
         
     }
 }
