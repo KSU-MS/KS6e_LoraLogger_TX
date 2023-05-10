@@ -16,10 +16,11 @@
 
 
 int pin_cs = 10;
-int pin_dio0 = 6;
-int pin_nrst = 7;
-int pin_dio1 = 5;
-
+int pin_dio0 = 16;
+int pin_nrst = 4;
+int pin_dio1 = 17;
+int pin_rx_enable = 8;
+int pin_tx_enable = 9;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
 String packVoltage = "";
 String inverterTemp = "";
@@ -58,12 +59,7 @@ void setup()
     delay(500); // Wait for ESP32 to be able to print
 
     Serial.print(F("[SX1276] Initializing ... "));
-
-    // int state = radio.begin(); //-121dBm
-    // int state = radio.begin(868.0); //-20dBm
-
     int state = radio.begin(915.0); //-23dBm
-
     if (state == RADIOLIB_ERR_NONE)
     {
         Serial.println(F("init success!"));
@@ -87,10 +83,6 @@ void setup()
     // controlled via two pins (RX enable, TX enable)
     // to enable automatic control of the switch,
     // call the following method
-
-    int pin_rx_enable = 8;
-    int pin_tx_enable = 9;
-
     radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
 
     // SD logging init stuff
