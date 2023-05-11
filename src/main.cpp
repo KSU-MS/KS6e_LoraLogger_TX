@@ -16,9 +16,9 @@
 
 
 int pin_cs = 10;
-int pin_dio0 = 16;
-int pin_nrst = 4;
-int pin_dio1 = 17;
+int pin_dio0 = 6;
+int pin_nrst = 7;
+int pin_dio1 = 5;
 int pin_rx_enable = 8;
 int pin_tx_enable = 9;
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
@@ -44,7 +44,7 @@ uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
 Metro timer_flush = Metro(50);
-Metro LoraTimer = Metro(1000);
+Metro LoraTimer = Metro(500);
 Metro getLoraData = Metro(200);
 
 void parse_can_message();
@@ -57,6 +57,10 @@ void sd_date_time(uint16_t *date, uint16_t *time);
 void setup()
 {
     delay(500); // Wait for ESP32 to be able to print
+
+    // FLEXCAN0_MCR &= 0xFFFDFFFF; // Enables CAN message self-reception
+    CAN.begin();
+    CAN.setBaudRate(500000);
 
     Serial.print(F("[SX1276] Initializing ... "));
     int state = radio.begin(915.0); //-23dBm
@@ -91,7 +95,7 @@ void setup()
     // Serial.begin(115200);
 
     /* Set up real-time clock */
-    // Teensy3Clock.set(1660351622); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
+    // Teensy3Clock.set(1683779230); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
     setSyncProvider(getTeensy3Time); // registers Teensy RTC as system time
 
     if (timeStatus() != timeSet)
@@ -104,10 +108,6 @@ void setup()
     }
 
     last_sec_epoch = Teensy3Clock.get();
-
-    // FLEXCAN0_MCR &= 0xFFFDFFFF; // Enables CAN message self-reception
-    CAN.begin();
-    CAN.setBaudRate(500000);
 
     /* Set up SD card */
     Serial.println("Initializing SD card...");
@@ -199,7 +199,7 @@ void loop()
         {
             // the packet was successfully transmitted
             Serial.println(F(" success!"));
-
+            Serial.println(output);
             // print measured data rate
             Serial.print(F("[SX1276] Datarate:\t"));
             Serial.print(radio.getDataRate());
