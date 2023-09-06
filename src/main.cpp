@@ -46,8 +46,8 @@ String output;
 uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
-Metro timer_flush = Metro(50);
-Metro LoraTimer = Metro(1);
+Metro timer_flush = Metro(5);
+Metro LoraTimer = Metro(100);
 Metro getLoraData = Metro(200);
 void parse_can_message();
 void write_to_SD(CAN_message_t *msg);
@@ -64,6 +64,9 @@ void setFlag(void) {
   
 }
 void setup() {
+    pinMode(LED_BUILTIN,OUTPUT);
+    digitalWrite(LED_BUILTIN,HIGH);
+
   delay(500); //Wait for ESP32 to be able to print
 
   Serial.print(F("[SX1276] Initializing ... "));
@@ -142,7 +145,7 @@ void setup() {
     
     logger.println("time,msg.id,msg.len,data"); // Print CSV heading to the logfile
     logger.flush();
-    transmissionState = radio.startTransmit("Hello World!");
+    transmissionState = radio.startTransmit("yeet");
 }
 
 // this function is called when a complete packet
@@ -150,30 +153,31 @@ void setup() {
 // IMPORTANT: this function MUST be 'void' type
 //            and MUST NOT have any arguments!
 void loop() {
+    digitalWrite(LED_BUILTIN,LOW);
     if(CAN.read(msg_rx)){
         if(msg_rx.id==ID_MC_TORQUE_TIMER_INFORMATION){
             torquereq=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
-            Serial.printf("torquereq: %d\n",torquereq);
+            // Serial.printf("torquereq: %d\n",torquereq);
         }        
         if(msg_rx.id==ID_MC_MOTOR_POSITION_INFORMATION){
             motorrpm=(msg_rx.buf[2]+msg_rx.buf[3]*256)/10;
-            Serial.printf("motorrpm: %d\n",motorrpm);
+            // Serial.printf("motorrpm: %d\n",motorrpm);
         }
         if(msg_rx.id==ID_MC_CURRENT_INFORMATION){
             invertercurrent=(msg_rx.buf[6]+msg_rx.buf[7]*256)/10;
-            Serial.printf("PackCurrent: %d\n",invertercurrent);
+            // Serial.printf("PackCurrent: %d\n",invertercurrent);
         }
         if(msg_rx.id==ID_MC_VOLTAGE_INFORMATION){
             packvoltage=(msg_rx.buf[0]+msg_rx.buf[1]*256)/10;
-            Serial.printf("PackVolts: %d\n",packvoltage);
+            // Serial.printf("PackVolts: %d\n",packvoltage);
         }
         if(msg_rx.id==ID_MC_TEMPERATURES_3){
             motortemp=(msg_rx.buf[4]+(msg_rx.buf[5]*256))/10;
-            Serial.printf("motortemp: %d\n",motortemp);
+            // Serial.printf("motortemp: %d\n",motortemp);
         }
         if(msg_rx.id==ID_MC_TEMPERATURES_1){
             invertertemp=(msg_rx.buf[0]+(msg_rx.buf[1]*256))/10;
-            Serial.printf("invtemp: %d\n",invertertemp);
+            // Serial.printf("invtemp: %d\n",invertertemp);
         }
         if(msg_rx.id==ID_MC_FAULT_CODES){
             invfaults="";
@@ -251,9 +255,10 @@ void parse_can_message() {
     }
 }
 void write_to_SD(CAN_message_t *msg) { // Note: This function does not flush data to disk! It will happen when the buffer fills or when the above flush timer fires
+    digitalWrite(LED_BUILTIN,HIGH);
     // Calculate Time
     //This block is verified to loop through
-
+    Serial.println("writing to SD buffer");
     uint64_t sec_epoch = Teensy3Clock.get();
     if (sec_epoch != last_sec_epoch) {
         global_ms_offset = millis() % 1000;
