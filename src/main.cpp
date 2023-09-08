@@ -211,6 +211,7 @@ void write_to_SD(CAN_message_t *msg) { // Note: This function does not flush dat
         logger.print(msg->buf[i], HEX);
     }
     logger.println();
+    digitalToggle(13);
 }
 time_t getTeensy3Time() {
     return Teensy3Clock.get();
