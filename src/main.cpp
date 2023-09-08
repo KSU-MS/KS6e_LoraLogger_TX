@@ -11,13 +11,13 @@
 #include <Metro.h>
 #include <FlexCAN_T4.h>
 #include <RadioLib.h>
-int pin_cs = 10;
-int pin_dio0 = 6;
-int pin_nrst = 7;
-int pin_dio1 = 5;
-SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
-String packVoltage="";
-String inverterTemp="";
+// int pin_cs = 10;
+// int pin_dio0 = 6;
+// int pin_nrst = 7;
+// int pin_dio1 = 5;
+// // SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
+// String packVoltage="";
+// String inverterTemp="";
 /*
  * CAN Variables
  */
@@ -34,8 +34,8 @@ uint64_t global_ms_offset = 0;
 uint64_t last_sec_epoch;
 Metro timer_debug_RTC = Metro(1000);
 Metro timer_flush = Metro(50);
-Metro LoraTimer = Metro(1000);
-Metro getLoraData = Metro(200);
+// Metro LoraTimer = Metro(1000);
+Metro getLoraData = Metro(100);
 void parse_can_message();
 void write_to_SD(CAN_message_t *msg);
 time_t getTeensy3Time();
@@ -43,17 +43,17 @@ void sd_date_time(uint16_t* date, uint16_t* time);
 void setup() {
   delay(500); //Wait for ESP32 to be able to print
 
-  Serial.print(F("[SX1276] Initializing ... "));
+//   Serial.print(F("[SX1276] Initializing ... "));
   //int state = radio.begin(); //-121dBm
   //int state = radio.begin(868.0); //-20dBm
-  int state = radio.begin(915.0); //-23dBm
-  if (state == RADIOLIB_ERR_NONE) {
-    Serial.println(F("init success!"));
-  } else {
-    Serial.print(F("failed, code "));
-    Serial.println(state);
-    while (true);
-  }
+//   int state = radio.begin(915.0); //-23dBm
+//   if (state == RADIOLIB_ERR_NONE) {
+//     Serial.println(F("init success!"));
+//   } else {
+//     Serial.print(F("failed, code "));
+//     Serial.println(state);
+//     while (true);
+//   }
 
   // set output power to 10 dBm (accepted range is -3 - 17 dBm)
   // NOTE: 20 dBm value allows high power operation, but transmission
@@ -67,11 +67,11 @@ void setup() {
   // controlled via two pins (RX enable, TX enable)
   // to enable automatic control of the switch,
   // call the following method
-  int pin_rx_enable = 8;
-  int pin_tx_enable = 9;
-  radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
+//   int pin_rx_enable = 8;
+//   int pin_tx_enable = 9;
+//   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
     //SD logging init stuff
-    delay(500); // Prevents suprious text files when turning the car on and off rapidly
+    // delay(500); // Prevents suprious text files when turning the car on and off rapidly
     /* Set up Serial, CAN */
     //Serial.begin(115200);
 
@@ -120,22 +120,22 @@ void setup() {
     logger.flush();
 }
 void loop() {
-    if(CAN.read(msg_rx)){
-        if(msg_rx.id==0xA7){
-            packVoltage="";
-            for(int i =0;i<msg_rx.len;i++){
-                packVoltage+=String(msg_rx.buf[i],HEX);
-            }
-            Serial.println(packVoltage);
-    }
-        if(msg_rx.id==0xA2){
-            inverterTemp="";
-            for(int i =0;i<msg_rx.len;i++){
-                inverterTemp+=String(msg_rx.buf[i],HEX);
-            }
-            Serial.println(inverterTemp);
-        }
-    }
+    // if(CAN.read(msg_rx)){
+    //     if(msg_rx.id==0xA7){
+    //         packVoltage="";
+    //         for(int i =0;i<msg_rx.len;i++){
+    //             packVoltage+=String(msg_rx.buf[i],HEX);
+    //         }
+    //         Serial.println(packVoltage);
+    // }
+    //     if(msg_rx.id==0xA2){
+    //         inverterTemp="";
+    //         for(int i =0;i<msg_rx.len;i++){
+    //             inverterTemp+=String(msg_rx.buf[i],HEX);
+    //         }
+    //         Serial.println(inverterTemp);
+    //     }
+    // }
     /* Process and log incoming CAN messages */
     parse_can_message();
     /* Flush data to SD card occasionally */
@@ -150,34 +150,34 @@ void loop() {
     }
 
 
-    if(LoraTimer.check()){
-        String output = packVoltage;
-        output+=",";
-        output+=inverterTemp;
-        int state = radio.transmit(output);
-        if (state == RADIOLIB_ERR_NONE) {
-            // the packet was successfully transmitted
-            Serial.println(F(" success!"));
+    // if(LoraTimer.check()){
+    //     String output = packVoltage;
+    //     output+=",";
+    //     output+=inverterTemp;
+    //     int state = radio.transmit(output);
+    //     if (state == RADIOLIB_ERR_NONE) {
+    //         // the packet was successfully transmitted
+    //         Serial.println(F(" success!"));
 
-            // print measured data rate
-            Serial.print(F("[SX1276] Datarate:\t"));
-            Serial.print(radio.getDataRate());
-            Serial.println(F(" bps"));
+    //         // print measured data rate
+    //         Serial.print(F("[SX1276] Datarate:\t"));
+    //         Serial.print(radio.getDataRate());
+    //         Serial.println(F(" bps"));
 
-        } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
-            // the supplied packet was longer than 256 bytes
-            Serial.println(F("too long!"));
+    //     } else if (state == RADIOLIB_ERR_PACKET_TOO_LONG) {
+    //         // the supplied packet was longer than 256 bytes
+    //         Serial.println(F("too long!"));
 
-        } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
-            // timeout occurred while transmitting packet
-            Serial.println(F("timeout!"));
+    //     } else if (state == RADIOLIB_ERR_TX_TIMEOUT) {
+    //         // timeout occurred while transmitting packet
+    //         Serial.println(F("timeout!"));
 
-        } else {
-            // some other error occurred
-            Serial.print(F("failed, code "));
-            Serial.println(state);
-        }
-}
+    //     } else {
+    //         // some other error occurred
+    //         Serial.print(F("failed, code "));
+    //         Serial.println(state);
+    //     }
+    // }
 }
 void parse_can_message() {
     while (CAN.read(msg_rx)) {
