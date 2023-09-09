@@ -12,6 +12,9 @@
 #include <Metro.h>
 #include <FlexCAN_T4.h>
 #include <RadioLib.h>
+
+#define USE_LORA false
+
 int pin_cs = 10;
 int pin_dio0 = 6;
 int pin_nrst = 7;
@@ -68,7 +71,7 @@ void setup() {
     digitalWrite(LED_BUILTIN,HIGH);
 
   delay(500); //Wait for ESP32 to be able to print
-
+  #if USE_LORA
   Serial.print(F("[SX1276] Initializing ... "));
   //int state = radio.begin(); //-121dBm
   //int state = radio.begin(868.0); //-20dBm
@@ -97,6 +100,7 @@ void setup() {
   int pin_tx_enable = 9;
   radio.setRfSwitchPins(pin_rx_enable, pin_tx_enable);
   radio.setDio0Action(setFlag);
+  #endif
     //SD logging init stuff
     delay(500); // Prevents suprious text files when turning the car on and off rapidly
     /* Set up Serial, CAN */
@@ -145,7 +149,9 @@ void setup() {
     
     logger.println("time,msg.id,msg.len,data"); // Print CSV heading to the logfile
     logger.flush();
+    #if USE_LORA
     transmissionState = radio.startTransmit("yeet");
+    #endif
 }
 
 // this function is called when a complete packet
@@ -204,7 +210,7 @@ void loop() {
         Serial.println(Teensy3Clock.get());
     }
 
-
+    #if USE_LORA
     if(LoraTimer.check() && transmittedFlag){
         enableInterrupt=false;
         transmittedFlag=false;
@@ -246,6 +252,7 @@ void loop() {
         Serial.printf("timestamp %f\n",starttime/1000);
         enableInterrupt=true;
     }
+    #endif
 }
 void parse_can_message() {
     while (CAN.read(msg_rx)) {
