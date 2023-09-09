@@ -22,6 +22,7 @@ int pin_dio1 = 5;
 int transmissionState = RADIOLIB_ERR_NONE;
 
 SX1276 radio = new Module(pin_cs, pin_dio0, pin_nrst, pin_dio1);
+
 uint16_t packvoltage=0,invertercurrent=0,torquereq=0,motorrpm=0;
 uint16_t motortemp=0;
 uint16_t invertertemp=0;
@@ -243,6 +244,7 @@ void loop() {
         Serial.print(F("[SX1276] Datarate:\t"));
         Serial.print(radio.getDataRate());
         Serial.println(F(" bps"));
+
         } else {
         // some other error occurred
         Serial.print(F("failed, code "));
