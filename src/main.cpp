@@ -45,7 +45,8 @@ void setup() {
     Serial.begin(115200);
 
     /* Set up real-time clock */
-    //Teensy3Clock.set(1660351622); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
+    // get the time from here: https://www.epochconverter.com/?source=searchbar&q=time+v
+    // Teensy3Clock.set(1704246446); // set time (epoch) at powerup  (COMMENT OUT THIS LINE AND PUSH ONCE RTC HAS BEEN SET!!!!)
     setSyncProvider(getTeensy3Time); // registers Teensy RTC as system time
   if (timeStatus() != timeSet) {
     Serial.println("RTC not set up - uncomment the Teensy3Clock.set() function call to set the time");
