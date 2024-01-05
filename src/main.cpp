@@ -38,6 +38,7 @@ void write_to_SD(CAN_message_t *msg);
 time_t getTeensy3Time();
 void sd_date_time(uint16_t* date, uint16_t* time);
 String date_time(int time);
+uint32_t bytes_written=0;
 void setup() {
     //SD logging init stuff
     delay(500); // Prevents suprious text files when turning the car on and off rapidly
@@ -88,6 +89,7 @@ void loop() {
   parse_can_message();
 /* Flush data to SD card occasionally */
   if (timer_flush.check()) {
+    bytes_written+=logger.available();
     logger.flush(); // Flush data to disk (data is also flushed whenever the 512 Byte buffer fills up, but this call ensures we don't lose more than a second of data when the car turns off)
   }
 /* Print timestamp to serial occasionally */
@@ -96,7 +98,9 @@ void loop() {
     Serial.println(current_timestamp);
     msg_tx.id=0x3FF;
     memcpy(&msg_tx.buf[0], &current_timestamp, sizeof(current_timestamp));
+    memcpy(&msg_tx.buf[4],&bytes_written,sizeof(bytes_written));
     CAN.write(msg_tx);
+    write_to_SD(&msg_tx);
   }
 
 }
